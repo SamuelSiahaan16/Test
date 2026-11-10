@@ -35,9 +35,16 @@ class Runner(QThread):
         self.cleanup_failed = False
         self.log_failed = False
         self.final_status = 'Selesai'
+        self.blocked_reason = None
 
     def stop(self):
         self.stop_event.set()
+
+    def halt_blocked(self, reason):
+        self.blocked_reason = str(reason)
+        self.monitor_disabled = True
+        self.stop_event.set()
+        self.log(f'Diblokir YouTube; run dihentikan, periksa halaman secara manual: {reason}')
 
     def log(self, message):
         if not self.log_failed:
@@ -77,6 +84,8 @@ class Runner(QThread):
                 self.report()
             if self.stop_event.is_set():
                 self.final_status = 'Dihentikan'
+            if self.blocked_reason:
+                self.final_status = 'Diblokir YouTube - perlu pemeriksaan manual'
             if self.cleanup_failed or self.log_failed:
                 self.final_status += ' — periksa error cleanup/log'
             self.outcome.emit(self.final_status)
@@ -173,7 +182,7 @@ class Runner(QThread):
             raise
         except Exception as exc:
             if isinstance(exc, PageBlocked):
-                self.monitor_disabled = True
+                self.halt_blocked(exc)
             old = self.last_snapshot
             suffix = f" | Data lama: {old['raw']} ({old['checked_at']})" if old else ''
             self.stats.emit(f'Pembacaan gagal: {exc}{suffix}')
@@ -235,6 +244,8 @@ class Runner(QThread):
         except Exception as exc:
             self.counts['failed'] += 1
             failure_reason = f'{type(exc).__name__}: {exc}'
+            if isinstance(exc, PageBlocked):
+                self.halt_blocked(exc)
             if diagnostics:
                 self.log(f'Sesi {number}: diagnostics=' + json.dumps(diagnostics.summary(), ensure_ascii=False))
             if sample:

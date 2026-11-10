@@ -7,6 +7,15 @@ from app.core.playback_probe import SAMPLE_JS, PlaybackProbe
 
 
 class BrowserTests(unittest.IsolatedAsyncioTestCase):
+    async def test_metadata_replaced_on_hover_does_not_need_hover(self):
+        context = await self.browser.new_context()
+        page = await self.page(context, '''<html lang="en"><div id="info-container"
+            title="1,234 views" onmouseenter="this.remove()">1.2K views</div></html>''')
+        snapshot = await read_snapshot(page, 'abcdefghijk')
+        self.assertEqual(snapshot['value'], 1234)
+        self.assertEqual(await page.locator('#info-container').count(), 1)
+        await context.close()
+
     async def test_shorts_shared_player_without_active_attribute(self):
         context = await self.browser.new_context()
         page = await context.new_page()

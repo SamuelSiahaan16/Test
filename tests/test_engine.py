@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 from app.core.runner import Runner
 from app.core.playback_probe import PlaybackProbe
-from app.core.view_count_monitor import parse_snapshot
+from app.core.view_count_monitor import parse_snapshot, PageBlocked
 
 
 class ProbeTests(unittest.TestCase):
@@ -52,6 +52,20 @@ class ProbeTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_blocked_session_halts_pending_work(self):
+        runner = self.runner(simulation=False, windows=1)
+        opened = []
+        async def blocked(pw):
+            opened.append(True)
+            raise PageBlocked('Sign in to confirm you are not a bot')
+        runner.open_browser = blocked
+        with self.assertRaises(asyncio.CancelledError):
+            await runner.workload(None)
+        self.assertEqual(len(opened), 1)
+        self.assertEqual(runner.counts, dict(completed=0, failed=1, cancelled=4, active=0))
+        self.assertTrue(runner.monitor_disabled)
+        self.assertIsNotNone(runner.blocked_reason)
+
     def runner(self, **overrides):
         runner = Runner(dict(dict(total=5, windows=2, duration=.02, simulation=True, monitor=False), **overrides))
         runner.log = lambda message: None
